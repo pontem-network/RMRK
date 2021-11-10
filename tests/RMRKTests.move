@@ -5,19 +5,16 @@ module Sender::RMRKTests {
     struct KittenImage has store {}
 
     #[test(acc = @0x42, owner_acc = @0x2)]
-    fun test_create_collection_mint_token_and_accept(acc: signer, owner_acc: signer) {
+    fun test_create_nft_storage_and_mint_token_there(acc: signer, owner_acc: signer) {
         RMRK::create_collection<KittenImage>(&acc, b"11112222-KITTEN_COLL");
         assert(RMRK::get_number_of_tokens_minted<KittenImage>(&acc) == 0, 1);
-        assert(RMRK::get_number_of_tokens_vacant<KittenImage>(&acc) == 0, 2);
+
+        RMRK::create_nft_storage<KittenImage>(&owner_acc);
 
         let kitten = KittenImage {};
         RMRK::mint_token(&acc, kitten, @0x2);
         assert(RMRK::get_number_of_tokens_minted<KittenImage>(&acc) == 1, 2);
-        assert(RMRK::get_number_of_tokens_vacant<KittenImage>(&acc) == 1, 2);
-
-        RMRK::accept_token<KittenImage>(&owner_acc, @0x42);
         assert(RMRK::token_exists<KittenImage>(@0x2), 2);
-        assert(RMRK::get_number_of_tokens_vacant<KittenImage>(&acc) == 0, 2);
     }
 
     #[test(acc = @0x42)]
@@ -49,3 +46,18 @@ module Sender::RMRKTests {
         RMRK::accept_collection_as_new_issuer<KittenImage>(&new_issuer_acc, @0x42);
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
