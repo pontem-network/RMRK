@@ -1,16 +1,21 @@
 module Sender::RMRK {
     use Std::Signer;
     use Std::Vector;
+    use Std::Option::{Self, Option};
 
     const ERR_COLLECTION_IS_ALREADY_EXISTS: u64 = 1;
     const ERR_COLLECTION_DOES_NOT_EXIST: u64 = 2;
+    const ERR_COLLECTION_ISSUER_ALREADY_CHANGED: u64 = 4;
+    const ERR_COLLECTION_NEW_ISSUER_INVALID: u64 = 6;
+    const ERR_COLLECTION_ISSUER_NOT_CHANGED: u64 = 5;
     const ERR_CANNOT_ISSUE_NOT_PERMITTED: u64 = 3;
 
     struct Collection<Type: store> has key {
         token_counter: u64,
         // ASCII
         pubkey_id: vector<u8>,
-        vacant_nfts: vector<VacantNFT<Type>>
+        vacant_nfts: vector<VacantNFT<Type>>,
+        next_issuer: Option<address>,
     }
 
     struct VacantNFT<Type: store> has store {
@@ -33,13 +38,43 @@ module Sender::RMRK {
         assert(!exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_IS_ALREADY_EXISTS);
 
         let collection =
-            Collection<Type> { token_counter: 0, pubkey_id: pubkey_id_with_symbol, vacant_nfts: Vector::empty() };
+            Collection<Type> {
+                token_counter: 0,
+                pubkey_id: pubkey_id_with_symbol,
+                vacant_nfts: Vector::empty(),
+                next_issuer: Option::none()
+            };
         move_to(issuer_acc, collection);
     }
 
-    //    public fun change_issuer<Type: store>() {
-    //
-    //    }
+    public fun change_collection_issuer<Type: store>(
+        issuer_acc: &signer,
+        new_issuer_addr: address
+    ) acquires Collection {
+        let issuer_addr = Signer::address_of(issuer_acc);
+        assert(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
+
+        let collection = borrow_global_mut<Collection<Type>>(issuer_addr);
+        assert(Option::is_none(&collection.next_issuer), ERR_COLLECTION_ISSUER_ALREADY_CHANGED);
+
+        collection.next_issuer = Option::some(new_issuer_addr);
+    }
+
+    public fun accept_collection_as_new_issuer<Type: store>(
+        new_issuer_acc: &signer,
+        old_issuer_addr: address
+    ) acquires Collection {
+        assert(exists<Collection<Type>>(old_issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
+
+        let collection = move_from<Collection<Type>>(old_issuer_addr);
+        assert(Option::is_some(&collection.next_issuer), ERR_COLLECTION_ISSUER_NOT_CHANGED);
+
+        let new_issuer_addr = Signer::address_of(new_issuer_acc);
+        assert(Option::contains(&collection.next_issuer, &new_issuer_addr), ERR_COLLECTION_NEW_ISSUER_INVALID);
+
+        collection.next_issuer = Option::none();
+        move_to(new_issuer_acc, collection);
+    }
 
     public fun mint_token<Type: store>(
         issuer_acc: &signer,
@@ -94,7 +129,12 @@ module Sender::RMRK {
     }
 
     #[test_only]
-    public fun accepted_token_exists<Type: store>(owner_addr: address): bool {
+    public fun collection_exists<Type: store>(issuer_addr: address): bool {
+        exists<Collection<Type>>(issuer_addr)
+    }
+
+    #[test_only]
+    public fun token_exists<Type: store>(owner_addr: address): bool {
         exists<NFT<Type>>(owner_addr)
     }
 }
