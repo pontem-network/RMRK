@@ -17,8 +17,8 @@ module Sender::RMRKTests {
 
         RMRK::create_nft_storage<KittenImage>(&acc);
 
-        RMRK::mint_token(&acc, KittenImage {}, @0x42);
-        RMRK::mint_token(&acc, KittenImage {}, @0x42);
+        RMRK::mint_token(&acc, KittenImage {}, b"http://kitten.com/1", @0x42);
+        RMRK::mint_token(&acc, KittenImage {}, b"http://kitten.com/2", @0x42);
     }
 
     #[test(acc = @0x42)]
@@ -27,11 +27,11 @@ module Sender::RMRKTests {
         create_kittens_collection(&acc, 0);
 
         RMRK::create_nft_storage<KittenImage>(&acc);
-        RMRK::mint_token(&acc, KittenImage {}, @0x42);
+        RMRK::mint_token(&acc, KittenImage {}, b"http://kitten.com/1", @0x42);
 
         RMRK::lock_collection<KittenImage>(&acc);
 
-        RMRK::mint_token(&acc, KittenImage {}, @0x42);
+        RMRK::mint_token(&acc, KittenImage {}, b"http://kitten.com/1", @0x42);
     }
 
     #[test(acc = @0x42, owner_acc = @0x2)]
@@ -42,7 +42,7 @@ module Sender::RMRKTests {
         RMRK::create_nft_storage<KittenImage>(&owner_acc);
 
         let kitten = KittenImage {};
-        RMRK::mint_token(&acc, kitten, @0x2);
+        RMRK::mint_token(&acc, kitten, b"http://kitten.com/1", @0x2);
         assert(RMRK::get_number_of_tokens_minted<KittenImage>(&acc) == 1, 2);
         assert(RMRK::token_exists<KittenImage>(@0x2), 2);
     }
@@ -86,7 +86,7 @@ module Sender::RMRKTests {
 
         let owner_addr = @0x2;
         RMRK::create_nft_storage<KittenImage>(&owner_acc);
-        RMRK::mint_token(&issuer_acc, KittenImage {}, owner_addr);
+        RMRK::mint_token(&issuer_acc, KittenImage {}, b"http://kitten.com/1", owner_addr);
         assert(RMRK::token_exists<KittenImage>(owner_addr), 1);
 
         RMRK::burn_token<KittenImage>(&owner_acc, 1);
@@ -99,7 +99,7 @@ module Sender::RMRKTests {
         create_kittens_collection(&issuer_acc, 0);
 
         RMRK::create_nft_storage<KittenImage>(&owner1_acc);
-        let token_id = RMRK::mint_token(&issuer_acc, KittenImage {}, @0x2);
+        let token_id = RMRK::mint_token(&issuer_acc, KittenImage {}, b"http://kitten.com/1", @0x2);
         assert(RMRK::token_exists<KittenImage>(@0x2), 1);
 
         RMRK::create_nft_storage<KittenImage>(&owner2_acc);
