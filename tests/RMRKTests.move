@@ -4,9 +4,39 @@ module Sender::RMRKTests {
 
     struct KittenImage has store {}
 
+    fun create_kittens_collection(acc: &signer, max_items: u64) {
+        let collection_uri = b"http://kittens.com";
+        RMRK::create_collection<KittenImage>(
+            acc, b"11112222-KITTEN_COLL", collection_uri, max_items);
+    }
+
+    #[test(acc = @0x42)]
+    #[expected_failure(abort_code = 24)]
+    fun test_cannot_create_more_token_than_max_items_of_tokens(acc: signer) {
+        create_kittens_collection(&acc, 1);
+
+        RMRK::create_nft_storage<KittenImage>(&acc);
+
+        RMRK::mint_token(&acc, KittenImage {}, @0x42);
+        RMRK::mint_token(&acc, KittenImage {}, @0x42);
+    }
+
+    #[test(acc = @0x42)]
+    #[expected_failure(abort_code = 25)]
+    fun test_cannot_create_tokens_for_a_locked_collection(acc: signer) {
+        create_kittens_collection(&acc, 0);
+
+        RMRK::create_nft_storage<KittenImage>(&acc);
+        RMRK::mint_token(&acc, KittenImage {}, @0x42);
+
+        RMRK::lock_collection<KittenImage>(&acc);
+
+        RMRK::mint_token(&acc, KittenImage {}, @0x42);
+    }
+
     #[test(acc = @0x42, owner_acc = @0x2)]
     fun test_create_nft_storage_and_mint_token_there(acc: signer, owner_acc: signer) {
-        RMRK::create_collection<KittenImage>(&acc, b"11112222-KITTEN_COLL");
+        create_kittens_collection(&acc, 0);
         assert(RMRK::get_number_of_tokens_minted<KittenImage>(&acc) == 0, 1);
 
         RMRK::create_nft_storage<KittenImage>(&owner_acc);
@@ -20,13 +50,16 @@ module Sender::RMRKTests {
     #[test(acc = @0x42)]
     #[expected_failure(abort_code = 1)]
     fun test_aborts_if_two_collections_with_the_same_type_are_created(acc: signer) {
-        RMRK::create_collection<KittenImage>(&acc, b"11112222-KITTEN_COLL");
-        RMRK::create_collection<KittenImage>(&acc, b"11113333-KITTEN_COLL");
+        create_kittens_collection(&acc, 0);
+
+        let collection_uri = b"http://kittens.com";
+        RMRK::create_collection<KittenImage>(
+            &acc, b"11113333-KITTEN_COLL", collection_uri, 0);
     }
 
     #[test(acc = @0x42, new_issuer_acc = @0x43)]
     fun test_change_issuer_of_the_collection(acc: signer, new_issuer_acc: signer) {
-        RMRK::create_collection<KittenImage>(&acc, b"11112222-KITTEN_COLL");
+        create_kittens_collection(&acc, 0);
 
         assert(RMRK::collection_exists<KittenImage>(@0x42), 1);
         assert(!RMRK::collection_exists<KittenImage>(@0x43), 1);
@@ -42,7 +75,8 @@ module Sender::RMRKTests {
     #[test(acc = @0x42, new_issuer_acc = @0x43)]
     #[expected_failure(abort_code = 5)]
     fun test_cannot_accept_collection_if_not_changed(acc: signer, new_issuer_acc: signer) {
-        RMRK::create_collection<KittenImage>(&acc, b"11112222-KITTEN_COLL");
+        create_kittens_collection(&acc, 0);
+
         RMRK::accept_collection_as_new_issuer<KittenImage>(&new_issuer_acc, @0x42);
     }
 }
