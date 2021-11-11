@@ -16,6 +16,8 @@ module Sender::RMRK {
     const ERR_NFT_STORAGE_DOES_NOT_EXIST: u64 = 11;
     const ERR_NFT_STORAGE_ALREADY_EXISTS: u64 = 12;
 
+    const ERR_TOKEN_WITH_ID_DOES_NOT_EXIST: u64 = 44;
+
     struct Collection<phantom Type: store> has key {
         token_counter: u64,
         // ASCII
@@ -27,17 +29,17 @@ module Sender::RMRK {
         locked: bool,
     }
 
-    struct NFT<Type: store> has store {
+    struct NFT<Type: store + drop> has store, drop {
         collection_id: vector<u8>,
         id: u64,
         content: Type,
     }
 
-    struct NFTStorage<Type: store> has key {
+    struct NFTStorage<Type: store + drop> has key {
         tokens: vector<NFT<Type>>,
     }
 
-    public fun create_collection<Type: store>(
+    public fun create_collection<Type: store + drop>(
         issuer_acc: &signer,
         pubkey_id_with_symbol: vector<u8>,
         uri: vector<u8>,
@@ -58,7 +60,7 @@ module Sender::RMRK {
         move_to(issuer_acc, collection);
     }
 
-    public fun change_collection_issuer<Type: store>(
+    public fun change_collection_issuer<Type: store + drop>(
         issuer_acc: &signer,
         new_issuer_addr: address
     ) acquires Collection {
@@ -71,7 +73,7 @@ module Sender::RMRK {
         collection.next_issuer = Option::some(new_issuer_addr);
     }
 
-    public fun accept_collection_as_new_issuer<Type: store>(
+    public fun accept_collection_as_new_issuer<Type: store + drop>(
         new_issuer_acc: &signer,
         old_issuer_addr: address
     ) acquires Collection {
@@ -87,7 +89,7 @@ module Sender::RMRK {
         move_to(new_issuer_acc, collection);
     }
 
-    public fun lock_collection<Type: store>(issuer_acc: &signer) acquires Collection {
+    public fun lock_collection<Type: store + drop>(issuer_acc: &signer) acquires Collection {
         let issuer_addr = Signer::address_of(issuer_acc);
         assert(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
@@ -95,7 +97,7 @@ module Sender::RMRK {
         collection.locked = true;
     }
 
-    public fun create_nft_storage<Type: store>(owner_acc: &signer) {
+    public fun create_nft_storage<Type: store + drop>(owner_acc: &signer) {
         let owner_addr = Signer::address_of(owner_acc);
         assert(!exists<NFTStorage<Type>>(owner_addr), ERR_NFT_STORAGE_ALREADY_EXISTS);
 
@@ -103,7 +105,7 @@ module Sender::RMRK {
         move_to(owner_acc, storage);
     }
 
-    public fun mint_token<Type: store>(
+    public fun mint_token<Type: store + drop>(
         issuer_acc: &signer,
         content: Type,
         owner_addr: address
@@ -120,6 +122,8 @@ module Sender::RMRK {
             ERR_MAX_NUMBER_OF_COLLECTION_ITEMS_REACHED
         );
 
+        assert(exists<NFTStorage<Type>>(owner_addr), ERR_NFT_STORAGE_DOES_NOT_EXIST);
+
         // start with 1
         let token_id = num_tokens + 1;
         collection.token_counter = num_tokens + 1;
@@ -127,17 +131,32 @@ module Sender::RMRK {
         let collection_id = *&collection.pubkey_id;
         let nft = NFT<Type> { collection_id: copy collection_id, id: token_id, content };
 
-        assert(exists<NFTStorage<Type>>(owner_addr), ERR_NFT_STORAGE_DOES_NOT_EXIST);
         let owner_nft_storage = borrow_global_mut<NFTStorage<Type>>(owner_addr);
         Vector::push_back(&mut owner_nft_storage.tokens, nft);
     }
 
-    fun is_infinite_items_allowed<Type: store>(collection: &Collection<Type>): bool {
+    public fun burn_token<Type: store + drop>(owner_acc: &signer, token_id: u64) acquires NFTStorage {
+        let owner_addr = Signer::address_of(owner_acc);
+        assert(exists<NFTStorage<Type>>(owner_addr), ERR_NFT_STORAGE_DOES_NOT_EXIST);
+
+        let storage = borrow_global_mut<NFTStorage<Type>>(owner_addr);
+        let tokens = &mut storage.tokens;
+        let i = 0;
+        while (i < Vector::length(tokens)) {
+            if (Vector::borrow(tokens, i).id == token_id) {
+                Vector::swap_remove(tokens, i);
+                return
+            }
+        };
+        abort ERR_TOKEN_WITH_ID_DOES_NOT_EXIST
+    }
+
+    fun is_infinite_items_allowed<Type: store + drop>(collection: &Collection<Type>): bool {
         collection.max_items == 0
     }
 
     #[test_only]
-    public fun get_number_of_tokens_minted<Type: store>(issuer_acc: &signer): u64 acquires Collection {
+    public fun get_number_of_tokens_minted<Type: store + drop>(issuer_acc: &signer): u64 acquires Collection {
         let addr = Signer::address_of(issuer_acc);
         assert(exists<Collection<Type>>(addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
@@ -146,12 +165,12 @@ module Sender::RMRK {
     }
 
     #[test_only]
-    public fun collection_exists<Type: store>(issuer_addr: address): bool {
+    public fun collection_exists<Type: store + drop>(issuer_addr: address): bool {
         exists<Collection<Type>>(issuer_addr)
     }
 
     #[test_only]
-    public fun token_exists<Type: store>(owner_addr: address): bool acquires NFTStorage {
+    public fun token_exists<Type: store + drop>(owner_addr: address): bool acquires NFTStorage {
         let storage = borrow_global_mut<NFTStorage<Type>>(owner_addr);
         Vector::length(&storage.tokens) != 0
     }

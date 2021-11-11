@@ -2,7 +2,7 @@
 module Sender::RMRKTests {
     use Sender::RMRK;
 
-    struct KittenImage has store {}
+    struct KittenImage has store, drop {}
 
     fun create_kittens_collection(acc: &signer, max_items: u64) {
         let collection_uri = b"http://kittens.com";
@@ -78,6 +78,19 @@ module Sender::RMRKTests {
         create_kittens_collection(&acc, 0);
 
         RMRK::accept_collection_as_new_issuer<KittenImage>(&new_issuer_acc, @0x42);
+    }
+
+    #[test(issuer_acc = @0x42, owner_acc = @0x2)]
+    fun test_burn_token(issuer_acc: signer, owner_acc: signer) {
+        create_kittens_collection(&issuer_acc, 0);
+
+        let owner_addr = @0x2;
+        RMRK::create_nft_storage<KittenImage>(&owner_acc);
+        RMRK::mint_token(&issuer_acc, KittenImage {}, owner_addr);
+        assert(RMRK::token_exists<KittenImage>(owner_addr), 1);
+
+        RMRK::burn_token<KittenImage>(&owner_acc, 1);
+        assert(!RMRK::token_exists<KittenImage>(owner_addr), 1);
     }
 }
 
