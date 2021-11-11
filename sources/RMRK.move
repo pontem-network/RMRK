@@ -17,6 +17,7 @@ module Sender::RMRK {
     const ERR_NFT_STORAGE_ALREADY_EXISTS: u64 = 12;
 
     const ERR_TOKEN_WITH_ID_DOES_NOT_EXIST: u64 = 44;
+    const ERR_TOKEN_IS_NOT_TRANSFERRABLE: u64 = 45;
 
     struct Collection<phantom Type: store> has key {
         token_counter: u64,
@@ -109,7 +110,7 @@ module Sender::RMRK {
         issuer_acc: &signer,
         content: Type,
         owner_addr: address
-    ) acquires Collection, NFTStorage {
+    ): u64 acquires Collection, NFTStorage {
         let addr = Signer::address_of(issuer_acc);
         assert(exists<Collection<Type>>(addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
@@ -122,8 +123,6 @@ module Sender::RMRK {
             ERR_MAX_NUMBER_OF_COLLECTION_ITEMS_REACHED
         );
 
-        assert(exists<NFTStorage<Type>>(owner_addr), ERR_NFT_STORAGE_DOES_NOT_EXIST);
-
         // start with 1
         let token_id = num_tokens + 1;
         collection.token_counter = num_tokens + 1;
@@ -131,8 +130,24 @@ module Sender::RMRK {
         let collection_id = *&collection.pubkey_id;
         let nft = NFT<Type> { collection_id: copy collection_id, id: token_id, content };
 
-        let owner_nft_storage = borrow_global_mut<NFTStorage<Type>>(owner_addr);
-        Vector::push_back(&mut owner_nft_storage.tokens, nft);
+        add_nft_to_storage(nft, owner_addr);
+        token_id
+    }
+
+    public fun send_token_to_account<Type: store + drop>(
+        owner_acc: &signer,
+        token_id: u64,
+        recipient_addr: address
+    ) acquires NFTStorage {
+        let owner_addr = Signer::address_of(owner_acc);
+        assert(exists<NFTStorage<Type>>(owner_addr), ERR_NFT_STORAGE_DOES_NOT_EXIST);
+        assert(exists<NFTStorage<Type>>(recipient_addr), ERR_NFT_STORAGE_DOES_NOT_EXIST);
+
+        let owner_storage = borrow_global_mut<NFTStorage<Type>>(owner_addr);
+        let nft = remove_nft_by_id(owner_storage, token_id);
+
+        assert(is_transferrable(&nft), ERR_TOKEN_IS_NOT_TRANSFERRABLE);
+        add_nft_to_storage(nft, recipient_addr);
     }
 
     public fun burn_token<Type: store + drop>(owner_acc: &signer, token_id: u64) acquires NFTStorage {
@@ -140,19 +155,40 @@ module Sender::RMRK {
         assert(exists<NFTStorage<Type>>(owner_addr), ERR_NFT_STORAGE_DOES_NOT_EXIST);
 
         let storage = borrow_global_mut<NFTStorage<Type>>(owner_addr);
-        let tokens = &mut storage.tokens;
-        let i = 0;
-        while (i < Vector::length(tokens)) {
-            if (Vector::borrow(tokens, i).id == token_id) {
-                Vector::swap_remove(tokens, i);
-                return
-            }
-        };
-        abort ERR_TOKEN_WITH_ID_DOES_NOT_EXIST
+        remove_nft_by_id(storage, token_id);
     }
 
     fun is_infinite_items_allowed<Type: store + drop>(collection: &Collection<Type>): bool {
         collection.max_items == 0
+    }
+
+    fun is_transferrable<Type: store + drop>(_nft: &NFT<Type>): bool {
+        // TODO: check transferability
+        true
+    }
+
+    fun add_nft_to_storage<Type: store + drop>(nft: NFT<Type>, storage_owner_addr: address) acquires NFTStorage {
+        assert(
+            exists<NFTStorage<Type>>(storage_owner_addr),
+            ERR_NFT_STORAGE_DOES_NOT_EXIST
+        );
+        let owner_nft_storage = borrow_global_mut<NFTStorage<Type>>(storage_owner_addr);
+        Vector::push_back(&mut owner_nft_storage.tokens, nft);
+    }
+
+    fun remove_nft_by_id<Type: store + drop>(
+        storage: &mut NFTStorage<Type>,
+        token_id: u64
+    ): NFT<Type> {
+        let tokens = &mut storage.tokens;
+        let i = 0;
+        while (i < Vector::length(tokens)) {
+            if (Vector::borrow(tokens, i).id == token_id) {
+                return Vector::swap_remove(tokens, i)
+            };
+            i = i + 1;
+        };
+        abort ERR_TOKEN_WITH_ID_DOES_NOT_EXIST
     }
 
     #[test_only]

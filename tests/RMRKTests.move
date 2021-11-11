@@ -91,6 +91,21 @@ module Sender::RMRKTests {
 
         RMRK::burn_token<KittenImage>(&owner_acc, 1);
         assert(!RMRK::token_exists<KittenImage>(owner_addr), 1);
+//        assert(RMRK::get_number_of_tokens_minted<KittenImage>(&issuer_acc) == 0, 2);
+    }
+
+    #[test(issuer_acc = @0x42, owner1_acc = @0x2, owner2_acc = @0x3)]
+    fun test_send_token_to_another_account(issuer_acc: signer, owner1_acc: signer, owner2_acc: signer) {
+        create_kittens_collection(&issuer_acc, 0);
+
+        RMRK::create_nft_storage<KittenImage>(&owner1_acc);
+        let token_id = RMRK::mint_token(&issuer_acc, KittenImage {}, @0x2);
+        assert(RMRK::token_exists<KittenImage>(@0x2), 1);
+
+        RMRK::create_nft_storage<KittenImage>(&owner2_acc);
+        RMRK::send_token_to_account<KittenImage>(&owner1_acc, token_id, @0x3);
+        assert(!RMRK::token_exists<KittenImage>(@0x2), 2);
+        assert(RMRK::token_exists<KittenImage>(@0x3), 3);
     }
 }
 
