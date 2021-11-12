@@ -36,6 +36,7 @@ module Sender::RMRK {
         content: Type,
         // ASCII
         uri: vector<u8>,
+        transferable: u64,
     }
 
     struct NFTStorage<Type: store + drop> has key {
@@ -112,6 +113,7 @@ module Sender::RMRK {
         issuer_acc: &signer,
         content: Type,
         uri: vector<u8>,
+        transferable: u64,
         owner_addr: address
     ): u64 acquires Collection, NFTStorage {
         let addr = Signer::address_of(issuer_acc);
@@ -131,7 +133,7 @@ module Sender::RMRK {
         collection.token_counter = num_tokens + 1;
 
         let collection_id = *&collection.pubkey_id;
-        let nft = NFT<Type> { collection_id: copy collection_id, id: token_id, content, uri };
+        let nft = NFT<Type> { collection_id: copy collection_id, id: token_id, content, uri, transferable };
 
         add_nft_to_storage(nft, owner_addr);
         token_id
@@ -165,9 +167,8 @@ module Sender::RMRK {
         collection.max_items == 0
     }
 
-    fun is_transferrable<Type: store + drop>(_nft: &NFT<Type>): bool {
-        // TODO: check transferability
-        true
+    fun is_transferrable<Type: store + drop>(nft: &NFT<Type>): bool {
+        nft.transferable == 1
     }
 
     fun add_nft_to_storage<Type: store + drop>(nft: NFT<Type>, storage_owner_addr: address) acquires NFTStorage {
