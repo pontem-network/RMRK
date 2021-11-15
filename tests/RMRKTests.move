@@ -93,9 +93,9 @@ module Sender::RMRKTests {
         RMRK::mint_token(&issuer_acc, KittenImage {}, b"http://kitten.com/1", 1, owner_addr);
         assert(RMRK::token_exists<KittenImage>(owner_addr), 1);
 
-        RMRK::burn_token<KittenImage>(&owner_acc, 1);
+        RMRK::burn_token<KittenImage>(&owner_acc, 1, @0x42);
         assert(!RMRK::token_exists<KittenImage>(owner_addr), 1);
-//        assert(RMRK::get_number_of_tokens_minted<KittenImage>(&issuer_acc) == 0, 2);
+        assert(RMRK::get_number_of_tokens_minted<KittenImage>(&issuer_acc) == 0, 2);
     }
 
     #[test(issuer_acc = @0x42, owner1_acc = @0x2, owner2_acc = @0x3)]
