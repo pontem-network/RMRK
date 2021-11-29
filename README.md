@@ -1,5 +1,9 @@
 # Initial NFT implementation (RMRK) in Move language
 
+https://www.rmrk.app/
+
+https://github.com/rmrk-team/rmrk-spec/tree/master/standards/rmrk2.0.0
+
 Entities:
 
 * NFT
@@ -18,7 +22,7 @@ Interactions:
 # How to build
 
 Install
-move-cli [https://github.com/diem/diem/tree/main/language/tools/move-cli](https://github.com/diem/diem/tree/main/language/tools/move-cli)
+move-cli https://github.com/diem/diem/tree/main/language/tools/move-cli
 to get `move` binary.
 
 To build package:
