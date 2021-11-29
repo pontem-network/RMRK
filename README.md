@@ -1,8 +1,7 @@
 # Initial NFT implementation (RMRK) in Move language
 
-https://www.rmrk.app/
-
-https://github.com/rmrk-team/rmrk-spec/tree/master/standards/rmrk2.0.0
+* [RMRK Website](https://www.rmrk.app/)
+* [RMRK Standard](https://github.com/rmrk-team/rmrk-spec/tree/master/standards/rmrk2.0.0)
 
 Entities:
 
