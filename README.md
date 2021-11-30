@@ -22,7 +22,7 @@ Interactions:
 # How to build
 
 Install
-[move-cli](https://github.com/diem/diem/tree/main/language/tools/move-cli)
+[move-cli from release-1.5 branch](https://github.com/diem/diem/tree/release-1.5/language/tools/move-cli)
 to get `move` binary.
 
 To build package:
