@@ -2,6 +2,7 @@
 module Sender::RMRK {
     use Std::Signer;
     use Std::Vector;
+    use Std::DiemBlock;
     use Std::Option::{Self, Option};
 
     const ERR_COLLECTION_ALREADY_EXISTS: u64 = 1;
@@ -201,7 +202,7 @@ module Sender::RMRK {
     }
 
     fun is_transferrable<Type: store + drop>(nft: &NFT<Type>): bool {
-        nft.transferable == 1
+        nft.transferable != 0 && nft.transferable <= DiemBlock::get_current_block_height()
     }
 
     fun add_nft_to_storage<Type: store + drop>(nft: NFT<Type>, storage_owner_addr: address) acquires NFTStorage {

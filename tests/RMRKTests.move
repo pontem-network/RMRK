@@ -1,6 +1,7 @@
 #[test_only]
 module Sender::RMRKTests {
     use Sender::RMRK;
+    use Std::DiemBlock;
 
     struct KittenImage has store, drop {}
 
@@ -18,9 +19,9 @@ module Sender::RMRKTests {
         RMRK::create_nft_storage<KittenImage>(&acc);
 
         RMRK::mint_token(
-            &acc, KittenImage{}, b"http://kitten.com/1", 1, @0x42);
+            &acc, KittenImage{}, b"http://kitten.com/1", 0, @0x42);
         RMRK::mint_token(
-            &acc, KittenImage{}, b"http://kitten.com/2", 1, @0x42);
+            &acc, KittenImage{}, b"http://kitten.com/2", 0, @0x42);
     }
 
     #[test(acc = @0x42)]
@@ -30,12 +31,12 @@ module Sender::RMRKTests {
 
         RMRK::create_nft_storage<KittenImage>(&acc);
         RMRK::mint_token(
-            &acc, KittenImage{}, b"http://kitten.com/1", 1, @0x42);
+            &acc, KittenImage{}, b"http://kitten.com/1", 0, @0x42);
 
         RMRK::lock_collection<KittenImage>(&acc);
 
         RMRK::mint_token(
-            &acc, KittenImage{}, b"http://kitten.com/1", 1, @0x42);
+            &acc, KittenImage{}, b"http://kitten.com/1", 0, @0x42);
     }
 
     #[test(acc = @0x42, owner_acc = @0x2)]
@@ -46,7 +47,7 @@ module Sender::RMRKTests {
         RMRK::create_nft_storage<KittenImage>(&owner_acc);
 
         let kitten = KittenImage{};
-        RMRK::mint_token(&acc, kitten, b"http://kitten.com/1", 1, @0x2);
+        RMRK::mint_token(&acc, kitten, b"http://kitten.com/1", 0, @0x2);
         assert(RMRK::get_number_of_tokens_minted<KittenImage>(&acc) == 1, 2);
         assert(RMRK::token_exists<KittenImage>(@0x2), 2);
     }
@@ -102,27 +103,12 @@ module Sender::RMRKTests {
 
         let owner_addr = @0x2;
         RMRK::create_nft_storage<KittenImage>(&owner_acc);
-        RMRK::mint_token(&issuer_acc, KittenImage{}, b"http://kitten.com/1", 1, owner_addr);
+        RMRK::mint_token(&issuer_acc, KittenImage{}, b"http://kitten.com/1", 0, owner_addr);
         assert(RMRK::token_exists<KittenImage>(owner_addr), 1);
 
         RMRK::burn_token<KittenImage>(&owner_acc, 1, @0x42);
         assert(!RMRK::token_exists<KittenImage>(owner_addr), 1);
         assert(RMRK::get_number_of_tokens_minted<KittenImage>(&issuer_acc) == 0, 2);
-    }
-
-    #[test(issuer_acc = @0x42, owner1_acc = @0x2, owner2_acc = @0x3)]
-    fun test_send_token_to_another_account(issuer_acc: signer, owner1_acc: signer, owner2_acc: signer) {
-        create_kittens_collection(&issuer_acc, 0);
-
-        RMRK::create_nft_storage<KittenImage>(&owner1_acc);
-        let token_id = RMRK::mint_token(
-            &issuer_acc, KittenImage{}, b"http://kitten.com/1", 1, @0x2);
-        assert(RMRK::token_exists<KittenImage>(@0x2), 1);
-
-        RMRK::create_nft_storage<KittenImage>(&owner2_acc);
-        RMRK::send_token_to_account<KittenImage>(&owner1_acc, token_id, @0x3);
-        assert(!RMRK::token_exists<KittenImage>(@0x2), 2);
-        assert(RMRK::token_exists<KittenImage>(@0x3), 3);
     }
 
     #[test(issuer_acc = @0x42, owner1_acc = @0x2, owner2_acc = @0x3)]
@@ -137,6 +123,35 @@ module Sender::RMRKTests {
 
         RMRK::create_nft_storage<KittenImage>(&owner2_acc);
         RMRK::send_token_to_account<KittenImage>(&owner1_acc, token_id, @0x3);
+    }
+
+    #[test(dr_acc = @DiemRoot, issuer_acc = @0x42, owner1_acc = @0x2, owner2_acc = @0x3)]
+    #[expected_failure(abort_code = 45)]
+    fun test_token_is_not_transferrable_if_number_of_blocks_not_reached(dr_acc: signer, issuer_acc: signer, owner1_acc: signer, owner2_acc: signer) {
+        create_kittens_collection(&issuer_acc, 0);
+
+        RMRK::create_nft_storage<KittenImage>(&owner1_acc);
+        let token_id = RMRK::mint_token(
+            &issuer_acc, KittenImage{}, b"http://kitten.com/1", 10, @0x2);
+        DiemBlock::set_current_block_height(&dr_acc, 1);
+
+        RMRK::create_nft_storage<KittenImage>(&owner2_acc);
+        RMRK::send_token_to_account<KittenImage>(&owner1_acc, token_id, @0x3);
+    }
+
+    #[test(dr_acc = @DiemRoot, issuer_acc = @0x42, owner1_acc = @0x2, owner2_acc = @0x3)]
+    fun test_token_transferable_after_block_height(dr_acc: signer, issuer_acc: signer, owner1_acc: signer, owner2_acc: signer) {
+        create_kittens_collection(&issuer_acc, 0);
+
+        RMRK::create_nft_storage<KittenImage>(&owner1_acc);
+        let token_id = RMRK::mint_token(
+            &issuer_acc, KittenImage{}, b"http://kitten.com/1", 10, @0x2);
+        DiemBlock::set_current_block_height(&dr_acc, 20);
+
+        RMRK::create_nft_storage<KittenImage>(&owner2_acc);
+        RMRK::send_token_to_account<KittenImage>(&owner1_acc, token_id, @0x3);
+        assert(!RMRK::token_exists<KittenImage>(@0x2), 2);
+        assert(RMRK::token_exists<KittenImage>(@0x3), 3);
     }
 }
 
