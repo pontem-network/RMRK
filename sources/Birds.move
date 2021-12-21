@@ -13,8 +13,8 @@ module Sender::Birds {
         RMRK::create_collection<Bird>(issuer_acc, collection_id, collection_uri, 10);
     }
 
-    public fun create_birds_nft_storage(owner_acc: &signer) {
-        RMRK::create_nft_storage<Bird>(owner_acc);
+    public fun create_birds_wallet(owner_acc: &signer) {
+        RMRK::create_nft_wallet<Bird>(owner_acc);
     }
 
     public fun mint_bird_nft(issuer_acc: &signer, bird_uri: ASCII::String, owner_addr: address): u64 {

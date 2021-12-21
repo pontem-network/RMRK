@@ -6,7 +6,7 @@ module Sender::BirdsTests {
     fun test_mint_bird_nft(issuer_acc: signer, owner_acc: signer) {
         Birds::create_birds_collection(&issuer_acc);
 
-        Birds::create_birds_nft_storage(&owner_acc);
+        Birds::create_birds_wallet(&owner_acc);
         Birds::mint_bird_nft(&issuer_acc, string(b"http://birds.com/1"), @0x42);
     }
 }
