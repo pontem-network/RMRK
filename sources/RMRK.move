@@ -2,6 +2,7 @@
 module Sender::RMRK {
     use Std::Signer;
     use Std::Vector;
+    use Std::ASCII;
     use Std::DiemBlock;
     use Std::Option::{Self, Option};
 
@@ -24,20 +25,19 @@ module Sender::RMRK {
 
     struct Collection<phantom Type: store> has key {
         next_token_id: u64,
-        pubkey_id: vector<u8>,
+        pubkey_id: ASCII::String,
+        uri: ASCII::String,
         max_items: u64,
         tokens_issued: u64,
-        uri: vector<u8>,
         next_issuer: Option<address>,
         locked: bool,
     }
 
     struct NFT<Type: store + drop> has store, drop {
-        collection_id: vector<u8>,
+        collection_pubkey_id: ASCII::String,
         id: u64,
         content: Type,
-        uri: vector<u8>,
-        transferable: u64,
+        transferrable: u64,
     }
 
     struct NFTStorage<Type: store + drop> has key {
@@ -48,8 +48,8 @@ module Sender::RMRK {
     /// (https://github.com/rmrk-team/rmrk-spec/blob/master/standards/rmrk2.0.0/interactions/create.md)
     public fun create_collection<Type: store + drop>(
         issuer_acc: &signer,
-        pubkey_id_with_symbol: vector<u8>,
-        uri: vector<u8>,
+        pubkey_id_with_symbol: ASCII::String,
+        uri: ASCII::String,
         max_items: u64,
     ) {
         let issuer_addr = Signer::address_of(issuer_acc);
@@ -125,6 +125,7 @@ module Sender::RMRK {
         collection.locked = true;
     }
 
+    /// Creates NFTStorage (NFT wallet). Requires &signer.
     public fun create_nft_storage<Type: store + drop>(owner_acc: &signer) {
         let owner_addr = Signer::address_of(owner_acc);
         assert(!exists<NFTStorage<Type>>(owner_addr), ERR_NFT_STORAGE_ALREADY_EXISTS);
@@ -136,8 +137,7 @@ module Sender::RMRK {
     public fun mint_token<Type: store + drop>(
         issuer_acc: &signer,
         content: Type,
-        uri: vector<u8>,
-        transferable: u64,
+        transferrable: u64,
         owner_addr: address
     ): u64 acquires Collection, NFTStorage {
         let addr = Signer::address_of(issuer_acc);
@@ -156,8 +156,8 @@ module Sender::RMRK {
         collection.next_token_id = collection.next_token_id + 1;
         collection.tokens_issued = tokens_issued + 1;
 
-        let collection_id = *&collection.pubkey_id;
-        let nft = NFT<Type>{ collection_id: copy collection_id, id: token_id, content, uri, transferable };
+        let collection_pubkey_id = *&collection.pubkey_id;
+        let nft = NFT<Type>{ collection_pubkey_id: copy collection_pubkey_id, id: token_id, content, transferrable };
 
         add_nft_to_storage(nft, owner_addr);
         token_id
@@ -193,7 +193,7 @@ module Sender::RMRK {
         assert(exists<Collection<Type>>(collection_issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
         let collection =
             borrow_global_mut<Collection<Type>>(collection_issuer_addr);
-        assert(*&collection.pubkey_id == *&nft.collection_id, ERR_COLLECTION_IS_INVALID);
+        assert(*&collection.pubkey_id == *&nft.collection_pubkey_id, ERR_COLLECTION_IS_INVALID);
         collection.tokens_issued = collection.tokens_issued - 1;
     }
 
@@ -202,7 +202,7 @@ module Sender::RMRK {
     }
 
     fun is_transferrable<Type: store + drop>(nft: &NFT<Type>): bool {
-        nft.transferable != 0 && nft.transferable <= DiemBlock::get_current_block_height()
+        nft.transferrable != 0 && nft.transferrable <= DiemBlock::get_current_block_height()
     }
 
     fun add_nft_to_storage<Type: store + drop>(nft: NFT<Type>, storage_owner_addr: address) acquires NFTStorage {
