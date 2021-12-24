@@ -20,8 +20,16 @@ module Sender::Birds {
         RMRK::create_collection<BirdImage>(issuer_acc, collection_id, collection_uri, 10);
     }
 
-    public fun create_birds_wallet(owner_acc: &signer) {
+    public fun create_bird_items_collection(issuer_acc: &signer) {
+        // TODO: get issuer pubkey_id
+        let collection_id = ASCII::string(b"bird_items_collection_id");
+        let collection_uri = ASCII::string(b"http://bird_items_collection.com");
+        RMRK::create_collection<BirdImageItem>(issuer_acc, collection_id, collection_uri, 10);
+    }
+
+    public fun create_bird_wallets(owner_acc: &signer) {
         RMRK::create_nft_wallet<BirdImage>(owner_acc);
+        RMRK::create_nft_wallet<BirdImageItem>(owner_acc);
     }
 
     public fun mint_bird_nft(issuer_acc: &signer, bird_url: ASCII::String, owner_addr: address) {
