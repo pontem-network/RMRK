@@ -23,6 +23,11 @@ module Sender::RMRK {
     const ERR_TOKEN_WITH_ID_DOES_NOT_EXIST: u64 = 44;
     const ERR_TOKEN_IS_NOT_TRANSFERRABLE: u64 = 45;
 
+    const ERR_PARENT_NFT_IS_SET: u64 = 51;
+    const ERR_PARENT_NFT_IS_NOT_SET: u64 = 52;
+    const ERR_PARENT_NFT_IS_DIFFERENT: u64 = 53;
+    const ERR_CHILD_NFT_DOES_NOT_EXIST: u64 = 54;
+
     struct Collection<phantom Type: store> has key {
         next_token_id: u64,
         pubkey_id: ASCII::String,
@@ -38,10 +43,18 @@ module Sender::RMRK {
         id: u64,
         content: Type,
         transferrable: u64,
+        parent_nft_id: Option<u64>,
+        children_nft_ids: vector<u64>,
+    }
+
+    /// Used to pack pair of (id, address) into a single entity to find NFT in the chain.
+    struct NFTChainIdent has copy, drop {
+        id: u64,
+        owner_acc_address: address
     }
 
     struct NFTWallet<Type: store + drop> has key {
-        tokens: vector<NFT<Type>>,
+        nfts: vector<NFT<Type>>,
     }
 
     /// Implements CREATE interaction from RMRK 2.0.0 spec
@@ -131,17 +144,16 @@ module Sender::RMRK {
         let owner_addr = Signer::address_of(owner_acc);
         assert(!exists<NFTWallet<Type>>(owner_addr), ERR_NFT_WALLET_ALREADY_EXISTS);
 
-        let wallet = NFTWallet<Type>{ tokens: Vector::empty() };
+        let wallet = NFTWallet<Type>{ nfts: Vector::empty() };
         move_to(owner_acc, wallet);
     }
 
     /// NFT MINT: mints new NFT for the specified content `Type`.
-    public fun mint_token<Type: store + drop>(
+    public fun mint_nft<Type: store + drop>(
         issuer_acc: &signer,
         content: Type,
         transferrable: u64,
-        owner_addr: address
-    ): u64 acquires Collection, NFTWallet {
+    ): NFT<Type> acquires Collection {
         let addr = Signer::address_of(issuer_acc);
         assert(exists<Collection<Type>>(addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
@@ -159,10 +171,79 @@ module Sender::RMRK {
         collection.tokens_issued = tokens_issued + 1;
 
         let collection_pubkey_id = *&collection.pubkey_id;
-        let nft = NFT<Type>{ collection_pubkey_id: copy collection_pubkey_id, id: token_id, content, transferrable };
+        let nft = NFT<Type>{
+            collection_pubkey_id: copy collection_pubkey_id,
+            id: token_id,
+            content,
+            transferrable,
+            parent_nft_id: Option::none(),
+            children_nft_ids: Vector::empty(),
+        };
+        nft
+    }
 
-        add_nft_to_wallet(nft, owner_addr);
-        token_id
+    public fun add_nft_to_wallet<Type: store + drop>(nft: NFT<Type>, wallet_owner_addr: address) acquires NFTWallet {
+        assert(
+            exists<NFTWallet<Type>>(wallet_owner_addr),
+            ERR_NFT_WALLET_DOES_NOT_EXIST
+        );
+        let wallet = borrow_global_mut<NFTWallet<Type>>(wallet_owner_addr);
+        Vector::push_back(&mut wallet.nfts, nft);
+    }
+
+    /// Creates parent-child relationship between two NFTs.
+    public fun set_parent_nft<Type: store + drop>(child_nft_ident: NFTChainIdent, parent_nft_ident: NFTChainIdent)
+    acquires NFTWallet {
+        set_child_nft_parent_id<Type>(copy child_nft_ident, Option::some(parent_nft_ident.id));
+
+        let NFTChainIdent { id, owner_acc_address } = parent_nft_ident;
+        assert(
+            exists<NFTWallet<Type>>(owner_acc_address),
+            ERR_NFT_WALLET_DOES_NOT_EXIST
+        );
+        let owner_wallet = borrow_global_mut<NFTWallet<Type>>(owner_acc_address);
+        let wallet_nfts = &mut owner_wallet.nfts;
+        let i = find_nft_index(wallet_nfts, id);
+        let parent_nft = Vector::borrow_mut(wallet_nfts, i);
+
+        Vector::push_back(&mut parent_nft.children_nft_ids, child_nft_ident.id);
+    }
+
+    /// Destroys parent-child relationship between two NFTs.
+    public fun unset_parent_nft<Type: store + drop>(child_nft_ident: NFTChainIdent, parent_nft_ident: NFTChainIdent)
+    acquires NFTWallet {
+        set_child_nft_parent_id<Type>(copy child_nft_ident, Option::none());
+
+        let NFTChainIdent { id: parent_id, owner_acc_address: parent_owner_addr } = parent_nft_ident;
+        assert(
+            exists<NFTWallet<Type>>(parent_owner_addr),
+            ERR_NFT_WALLET_DOES_NOT_EXIST
+        );
+        let owner_wallet = borrow_global_mut<NFTWallet<Type>>(parent_owner_addr);
+        let i = find_nft_index(&owner_wallet.nfts, parent_id);
+        let parent_nft = Vector::borrow_mut(&mut owner_wallet.nfts, i);
+
+        let (child_exists, i) = Vector::index_of(&parent_nft.children_nft_ids, &child_nft_ident.id);
+        assert(child_exists, ERR_CHILD_NFT_DOES_NOT_EXIST);
+        Vector::swap_remove(&mut parent_nft.children_nft_ids, i);
+    }
+
+    public fun children<Type: store + drop>(parent_nft_ident: NFTChainIdent): vector<u64>
+    acquires NFTWallet {
+        let NFTChainIdent { id: nft_id, owner_acc_address: owner_addr } = parent_nft_ident;
+        assert(
+            exists<NFTWallet<Type>>(owner_addr),
+            ERR_NFT_WALLET_DOES_NOT_EXIST
+        );
+        let owner_wallet = borrow_global_mut<NFTWallet<Type>>(owner_addr);
+        let i = find_nft_index(&owner_wallet.nfts, nft_id);
+        let parent_nft = Vector::borrow_mut(&mut owner_wallet.nfts, i);
+        *&parent_nft.children_nft_ids
+    }
+
+    /// Creates pair of (nft_id, nft_owner_account_address) to find it on chain.
+    public fun nft_chain_ident(id: u64, owner_acc_address: address): NFTChainIdent {
+        NFTChainIdent { id, owner_acc_address }
     }
 
     /// NFT SEND: send NFT from `owner_acc` to `recipient_addr`.
@@ -201,6 +282,28 @@ module Sender::RMRK {
         assert(*&collection.pubkey_id == *&nft.collection_pubkey_id, ERR_COLLECTION_IS_INVALID);
         collection.tokens_issued = collection.tokens_issued - 1;
     }
+    // NFT ( id, content )
+    // NFT Record
+
+    fun set_child_nft_parent_id<Type: store + drop>(child_nft_ident: NFTChainIdent, parent_id: Option<u64>)
+    acquires NFTWallet {
+        let NFTChainIdent { id: child_id, owner_acc_address: child_owner_addr } = child_nft_ident;
+        assert(
+            exists<NFTWallet<Type>>(child_owner_addr),
+            ERR_NFT_WALLET_DOES_NOT_EXIST
+        );
+        let owner_wallet = borrow_global_mut<NFTWallet<Type>>(child_owner_addr);
+        let wallet_nfts = &mut owner_wallet.nfts;
+        let i = find_nft_index(wallet_nfts, child_id);
+        let child_nft = Vector::borrow_mut(wallet_nfts, i);
+
+        if (Option::is_none(&parent_id)) {
+            assert(Option::is_some(&child_nft.parent_nft_id), ERR_PARENT_NFT_IS_NOT_SET);
+        } else {
+            assert(Option::is_none(&child_nft.parent_nft_id), ERR_PARENT_NFT_IS_SET)
+        };
+        child_nft.parent_nft_id = parent_id;
+    }
 
     fun is_infinite_items_allowed<Type: store + drop>(collection: &Collection<Type>): bool {
         collection.max_items == 0
@@ -210,29 +313,29 @@ module Sender::RMRK {
         nft.transferrable != 0 && nft.transferrable <= DiemBlock::get_current_block_height()
     }
 
-    fun add_nft_to_wallet<Type: store + drop>(nft: NFT<Type>, wallet_owner_addr: address) acquires NFTWallet {
-        assert(
-            exists<NFTWallet<Type>>(wallet_owner_addr),
-            ERR_NFT_WALLET_DOES_NOT_EXIST
-        );
-        let owner_nft_wallet = borrow_global_mut<NFTWallet<Type>>(wallet_owner_addr);
-        Vector::push_back(&mut owner_nft_wallet.tokens, nft);
-    }
-
-    fun remove_nft_by_id<Type: store + drop>(
-        wallet: &mut NFTWallet<Type>,
-        token_id: u64
-    ): NFT<Type> {
-        let tokens = &mut wallet.tokens;
+    fun find_nft_index<Type: store + drop>(tokens: &vector<NFT<Type>>, id: u64): u64 {
         let i = 0;
         while (i < Vector::length(tokens)) {
-            if (Vector::borrow(tokens, i).id == token_id) {
-                return Vector::swap_remove(tokens, i)
+            if (Vector::borrow(tokens, i).id == id) {
+                return i
             };
             i = i + 1;
         };
         abort ERR_TOKEN_WITH_ID_DOES_NOT_EXIST
     }
+
+    fun borrow_mut_nft_by_id<Type: store + drop>(wallet: &mut NFTWallet<Type>, id: u64): &mut NFT<Type> {
+        let i = find_nft_index(&wallet.nfts, id);
+        Vector::borrow_mut(&mut wallet.nfts, i)
+    }
+
+    fun remove_nft_by_id<Type: store + drop>(wallet: &mut NFTWallet<Type>, id: u64): NFT<Type> {
+        let i = find_nft_index(&wallet.nfts, id);
+        Vector::swap_remove(&mut wallet.nfts, i)
+    }
+
+    #[test_only]
+    public fun get_nft_id<Type: store + drop>(nft: &NFT<Type>): u64 { nft.id }
 
     #[test_only]
     public fun get_number_of_tokens_minted<Type: store + drop>(issuer_acc: &signer): u64 acquires Collection {
@@ -251,7 +354,7 @@ module Sender::RMRK {
     #[test_only]
     public fun token_exists<Type: store + drop>(owner_addr: address): bool acquires NFTWallet {
         let wallet = borrow_global_mut<NFTWallet<Type>>(owner_addr);
-        Vector::length(&wallet.tokens) != 0
+        Vector::length(&wallet.nfts) != 0
     }
 }
 
