@@ -14,6 +14,7 @@ module Sender::Birds {
     }
 
     public fun create_birds_collection(issuer_acc: &signer) {
+        RMRK::initialize_issuer<BirdImage>(issuer_acc);
         // TODO: get issuer pubkey_id
         let collection_id = ASCII::string(b"birds_collection_id");
         let collection_uri = ASCII::string(b"http://birds_collection.com");
@@ -32,7 +33,7 @@ module Sender::Birds {
         RMRK::create_nft_wallet<BirdImageItem>(owner_acc);
     }
 
-    public fun mint_bird_nft(issuer_acc: &signer, bird_url: ASCII::String, owner_addr: address) {
+    public fun mint_bird_nft(issuer_acc: &signer, bird_url: String, owner_addr: address) {
         let bird = BirdImage{ content_url: bird_url, head: Option::none(), background: Option::none() };
         let nft = RMRK::mint_nft(issuer_acc, bird, 1);
         RMRK::add_nft_to_wallet(nft, owner_addr);

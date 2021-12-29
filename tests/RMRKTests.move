@@ -8,6 +8,8 @@ module Sender::RMRKTests {
     struct KittenImage has store, drop {}
 
     fun create_kittens_collection(acc: &signer, max_items: u64) {
+        RMRK::initialize_issuer<KittenImage>(acc);
+
         let collection_id = string(b"11112222-KITTEN_COLL");
         let collection_uri = string(b"http://kittens.com");
         RMRK::create_collection<KittenImage>(
