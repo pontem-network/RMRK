@@ -62,12 +62,12 @@ module Sender::RMRK {
     public fun initialize_issuer<Type: store + drop>(issuer_acc: &signer) {
         Event::publish_generator(issuer_acc);
         move_to(issuer_acc, IssuerAccount<Type>{
-            create_collection_handle: Event::new_event_handle(issuer_acc),
-            request_change_issuer_handle: Event::new_event_handle(issuer_acc),
-            cancel_change_issuer_handle: Event::new_event_handle(issuer_acc),
-            accept_change_issuer_handle: Event::new_event_handle(issuer_acc),
-            change_issuer_handle: Event::new_event_handle(issuer_acc),
-            lock_collection_handle: Event::new_event_handle(issuer_acc)
+            create_collection_events: Event::new_event_handle(issuer_acc),
+            request_change_issuer_events: Event::new_event_handle(issuer_acc),
+            cancel_change_issuer_events: Event::new_event_handle(issuer_acc),
+            accept_change_issuer_events: Event::new_event_handle(issuer_acc),
+            change_issuer_events: Event::new_event_handle(issuer_acc),
+            lock_collection_events: Event::new_event_handle(issuer_acc)
         });
     }
 
@@ -94,7 +94,7 @@ module Sender::RMRK {
             };
         move_to(issuer_acc, collection);
         Event::emit_event(
-            &mut borrow_global_mut<IssuerAccount<Type>>(issuer_addr).create_collection_handle,
+            &mut borrow_global_mut<IssuerAccount<Type>>(issuer_addr).create_collection_events,
             CreateCollectionEvent<Type> {
                 pubkey_id: pubkey_id_with_symbol,
                 uri,
@@ -112,7 +112,7 @@ module Sender::RMRK {
     public fun change_collection_issuer<Type: store + drop>(
         issuer_acc: &signer,
         new_issuer_addr: address
-    ) acquires Collection {
+    ) acquires Collection, IssuerAccount {
         let issuer_addr = Signer::address_of(issuer_acc);
         assert(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
@@ -120,17 +120,38 @@ module Sender::RMRK {
         assert(Option::is_none(&collection.next_issuer), ERR_COLLECTION_ISSUER_ALREADY_CHANGED);
 
         collection.next_issuer = Option::some(new_issuer_addr);
+
+        let pubkey_id = *&collection.pubkey_id;
+        Event::emit_event(
+            &mut borrow_global_mut<IssuerAccount<Type>>(issuer_addr).request_change_issuer_events,
+            RequestChangeIssuerEvent<Type> {
+                pubkey_id: copy pubkey_id,
+                old_issuer: issuer_addr,
+                new_issuer: new_issuer_addr,
+            }
+        );
     }
 
     /// Cancel CHANGEISSUER request, see `change_collection_issuer`.
-    public fun cancel_collection_issuer_change<Type: store + drop>(issuer_acc: &signer) acquires Collection {
+    public fun cancel_collection_issuer_change<Type: store + drop>(issuer_acc: &signer) acquires Collection, IssuerAccount {
         let issuer_addr = Signer::address_of(issuer_acc);
         assert(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
         let collection = borrow_global_mut<Collection<Type>>(issuer_addr);
         assert(Option::is_some(&collection.next_issuer), ERR_COLLECTION_NEW_ISSUER_INVALID);
 
+        let new_issuer = *Option::borrow(&collection.next_issuer);
         collection.next_issuer = Option::none();
+
+        let pubkey_id = *&collection.pubkey_id;
+        Event::emit_event(
+            &mut borrow_global_mut<IssuerAccount<Type>>(issuer_addr).cancel_change_issuer_events,
+            CancelChangeIssuerEvent<Type> {
+                pubkey_id: copy pubkey_id,
+                old_issuer: issuer_addr,
+                new_issuer,
+            }
+        );
     }
 
     /// Part 2 of the implementation of CHANGEISSUER interaction from RMRK 2.0.0 spec
@@ -139,7 +160,7 @@ module Sender::RMRK {
     public fun accept_collection_as_new_issuer<Type: store + drop>(
         new_issuer_acc: &signer,
         old_issuer_addr: address
-    ) acquires Collection {
+    ) acquires Collection, IssuerAccount {
         assert(exists<Collection<Type>>(old_issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
         let collection = move_from<Collection<Type>>(old_issuer_addr);
@@ -147,19 +168,46 @@ module Sender::RMRK {
 
         let new_issuer_addr = Signer::address_of(new_issuer_acc);
         assert(Option::contains(&collection.next_issuer, &new_issuer_addr), ERR_COLLECTION_NEW_ISSUER_INVALID);
+        let pubkey_id = *&collection.pubkey_id;
 
         collection.next_issuer = Option::none();
         move_to(new_issuer_acc, collection);
+
+        Event::emit_event(
+            &mut borrow_global_mut<IssuerAccount<Type>>(old_issuer_addr).accept_change_issuer_events,
+            AcceptChangeIssuerEvent<Type> {
+                pubkey_id: copy pubkey_id,
+                old_issuer: old_issuer_addr,
+                new_issuer: new_issuer_addr,
+            }
+        );
+        Event::emit_event(
+            &mut borrow_global_mut<IssuerAccount<Type>>(new_issuer_addr).change_issuer_events,
+            ChangeIssuerEvent<Type> {
+                pubkey_id: copy pubkey_id,
+                old_issuer: old_issuer_addr,
+                new_issuer: new_issuer_addr,
+            }
+        );
     }
 
     /// COLLECTION LOCK: disables issuance of new NFT tokens in this collection. Irreversible.
     public fun lock_collection<Type: store + drop>(issuer_acc: &signer)
-    acquires Collection {
+    acquires Collection, IssuerAccount {
         let issuer_addr = Signer::address_of(issuer_acc);
         assert(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
         let collection = borrow_global_mut<Collection<Type>>(issuer_addr);
         collection.locked = true;
+
+        let pubkey_id = *&collection.pubkey_id;
+        Event::emit_event(
+            &mut borrow_global_mut<IssuerAccount<Type>>(issuer_addr).lock_collection_events,
+            LockCollectionEvent<Type> {
+                pubkey_id: copy pubkey_id,
+                issuer: issuer_addr,
+            }
+        );
     }
 
     /// Creates new NFT Wallet of `Type`. Requires &signer.
@@ -371,12 +419,12 @@ module Sender::RMRK {
     }
 
     struct IssuerAccount<phantom Type> has key {
-        create_collection_handle: Event::EventHandle<CreateCollectionEvent<Type>>,
-        change_issuer_handle: Event::EventHandle<ChangeIssuerEvent<Type>>,
-        request_change_issuer_handle: Event::EventHandle<RequestChangeIssuerEvent<Type>>,
-        accept_change_issuer_handle: Event::EventHandle<AcceptChangeIssuerEvent<Type>>,
-        cancel_change_issuer_handle: Event::EventHandle<CancelChangeIssuerEvent<Type>>,
-        lock_collection_handle: Event::EventHandle<LockCollectionEvent<Type>>,
+        create_collection_events: Event::EventHandle<CreateCollectionEvent<Type>>,
+        change_issuer_events: Event::EventHandle<ChangeIssuerEvent<Type>>,
+        request_change_issuer_events: Event::EventHandle<RequestChangeIssuerEvent<Type>>,
+        accept_change_issuer_events: Event::EventHandle<AcceptChangeIssuerEvent<Type>>,
+        cancel_change_issuer_events: Event::EventHandle<CancelChangeIssuerEvent<Type>>,
+        lock_collection_events: Event::EventHandle<LockCollectionEvent<Type>>,
     }
 
     struct CreateCollectionEvent<phantom Type> has store, drop {
@@ -403,9 +451,16 @@ module Sender::RMRK {
         new_issuer: address,
     }
 
-    struct ChangeIssuerEvent<phantom Type> has store, drop {}
+    struct ChangeIssuerEvent<phantom Type> has store, drop {
+        pubkey_id: String,
+        old_issuer: address,
+        new_issuer: address,
+    }
 
-    struct LockCollectionEvent<phantom Type> has store, drop {}
+    struct LockCollectionEvent<phantom Type> has store, drop {
+        pubkey_id: String,
+        issuer: address,
+    }
 }
 
 

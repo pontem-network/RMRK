@@ -81,6 +81,7 @@ module Sender::RMRKTests {
         assert(RMRK::collection_exists<KittenImage>(@0x42), 1);
         assert(!RMRK::collection_exists<KittenImage>(new_issuer_addr), 1);
 
+        RMRK::initialize_issuer<KittenImage>(&new_issuer_acc);
         RMRK::change_collection_issuer<KittenImage>(&acc, new_issuer_addr);
         RMRK::accept_collection_as_new_issuer<KittenImage>(&new_issuer_acc, @0x42);
 
