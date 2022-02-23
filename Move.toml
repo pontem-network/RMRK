@@ -5,7 +5,8 @@ version = "0.1.0"
 [addresses]
 Std = "0x1"
 Sender = "0x2"
+DiemRoot = "0xA550C18"
 
 [dependencies]
-MoveStdlib = { local = "./move-stdlib", addr_subst = { "Std" = "0x1" } }
-PontemFramework = { local = "./pontem-framework", addr_subst = { "Std" = "0x1" } }
+MoveStdlib = { git = "git@github.com:pontem-network/move-stdlib.git", rev = "9ecc6816a6b7089cb1472cf81fd187582312f9f3" }
+PontStdlib = { git = "git@github.com:pontem-network/pont-stdlib.git", rev = "02e574b1c378cb59268273ef17518cb90bc02a9b" }

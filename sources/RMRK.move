@@ -3,7 +3,7 @@ module Sender::RMRK {
     use Std::Signer;
     use Std::Vector;
     use Std::ASCII::String;
-    use Std::DiemBlock;
+    use PontemFramework::PontBlock;
     use Std::Event;
     use Std::Option::{Self, Option};
 
@@ -60,7 +60,6 @@ module Sender::RMRK {
 
     /// Perform an initialization steps for the future issuer of collections.
     public fun initialize_issuer<Type: store + drop>(issuer_acc: &signer) {
-        Event::publish_generator(issuer_acc);
         move_to(issuer_acc, IssuerAccount<Type>{
             create_collection_events: Event::new_event_handle(issuer_acc),
             request_change_issuer_events: Event::new_event_handle(issuer_acc),
@@ -80,7 +79,7 @@ module Sender::RMRK {
         max_items: u64,
     ) acquires IssuerAccount {
         let issuer_addr = Signer::address_of(issuer_acc);
-        assert(!exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_ALREADY_EXISTS);
+        assert!(!exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_ALREADY_EXISTS);
 
         let collection =
             Collection<Type>{
@@ -95,7 +94,7 @@ module Sender::RMRK {
         move_to(issuer_acc, collection);
         Event::emit_event(
             &mut borrow_global_mut<IssuerAccount<Type>>(issuer_addr).create_collection_events,
-            CreateCollectionEvent<Type> {
+            CreateCollectionEvent<Type>{
                 pubkey_id: pubkey_id_with_symbol,
                 uri,
                 issuer: issuer_addr,
@@ -114,17 +113,17 @@ module Sender::RMRK {
         new_issuer_addr: address
     ) acquires Collection, IssuerAccount {
         let issuer_addr = Signer::address_of(issuer_acc);
-        assert(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
+        assert!(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
         let collection = borrow_global_mut<Collection<Type>>(issuer_addr);
-        assert(Option::is_none(&collection.next_issuer), ERR_COLLECTION_ISSUER_ALREADY_CHANGED);
+        assert!(Option::is_none(&collection.next_issuer), ERR_COLLECTION_ISSUER_ALREADY_CHANGED);
 
         collection.next_issuer = Option::some(new_issuer_addr);
 
         let pubkey_id = *&collection.pubkey_id;
         Event::emit_event(
             &mut borrow_global_mut<IssuerAccount<Type>>(issuer_addr).request_change_issuer_events,
-            RequestChangeIssuerEvent<Type> {
+            RequestChangeIssuerEvent<Type>{
                 pubkey_id: copy pubkey_id,
                 old_issuer: issuer_addr,
                 new_issuer: new_issuer_addr,
@@ -135,10 +134,10 @@ module Sender::RMRK {
     /// Cancel CHANGEISSUER request, see `change_collection_issuer`.
     public fun cancel_collection_issuer_change<Type: store + drop>(issuer_acc: &signer) acquires Collection, IssuerAccount {
         let issuer_addr = Signer::address_of(issuer_acc);
-        assert(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
+        assert!(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
         let collection = borrow_global_mut<Collection<Type>>(issuer_addr);
-        assert(Option::is_some(&collection.next_issuer), ERR_COLLECTION_NEW_ISSUER_INVALID);
+        assert!(Option::is_some(&collection.next_issuer), ERR_COLLECTION_NEW_ISSUER_INVALID);
 
         let new_issuer = *Option::borrow(&collection.next_issuer);
         collection.next_issuer = Option::none();
@@ -146,7 +145,7 @@ module Sender::RMRK {
         let pubkey_id = *&collection.pubkey_id;
         Event::emit_event(
             &mut borrow_global_mut<IssuerAccount<Type>>(issuer_addr).cancel_change_issuer_events,
-            CancelChangeIssuerEvent<Type> {
+            CancelChangeIssuerEvent<Type>{
                 pubkey_id: copy pubkey_id,
                 old_issuer: issuer_addr,
                 new_issuer,
@@ -161,13 +160,13 @@ module Sender::RMRK {
         new_issuer_acc: &signer,
         old_issuer_addr: address
     ) acquires Collection, IssuerAccount {
-        assert(exists<Collection<Type>>(old_issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
+        assert!(exists<Collection<Type>>(old_issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
         let collection = move_from<Collection<Type>>(old_issuer_addr);
-        assert(Option::is_some(&collection.next_issuer), ERR_COLLECTION_ISSUER_NOT_CHANGED);
+        assert!(Option::is_some(&collection.next_issuer), ERR_COLLECTION_ISSUER_NOT_CHANGED);
 
         let new_issuer_addr = Signer::address_of(new_issuer_acc);
-        assert(Option::contains(&collection.next_issuer, &new_issuer_addr), ERR_COLLECTION_NEW_ISSUER_INVALID);
+        assert!(Option::contains(&collection.next_issuer, &new_issuer_addr), ERR_COLLECTION_NEW_ISSUER_INVALID);
         let pubkey_id = *&collection.pubkey_id;
 
         collection.next_issuer = Option::none();
@@ -175,7 +174,7 @@ module Sender::RMRK {
 
         Event::emit_event(
             &mut borrow_global_mut<IssuerAccount<Type>>(old_issuer_addr).accept_change_issuer_events,
-            AcceptChangeIssuerEvent<Type> {
+            AcceptChangeIssuerEvent<Type>{
                 pubkey_id: copy pubkey_id,
                 old_issuer: old_issuer_addr,
                 new_issuer: new_issuer_addr,
@@ -183,7 +182,7 @@ module Sender::RMRK {
         );
         Event::emit_event(
             &mut borrow_global_mut<IssuerAccount<Type>>(new_issuer_addr).change_issuer_events,
-            ChangeIssuerEvent<Type> {
+            ChangeIssuerEvent<Type>{
                 pubkey_id: copy pubkey_id,
                 old_issuer: old_issuer_addr,
                 new_issuer: new_issuer_addr,
@@ -192,10 +191,9 @@ module Sender::RMRK {
     }
 
     /// COLLECTION LOCK: disables issuance of new NFT tokens in this collection. Irreversible.
-    public fun lock_collection<Type: store + drop>(issuer_acc: &signer)
-    acquires Collection, IssuerAccount {
+    public fun lock_collection<Type: store + drop>(issuer_acc: &signer) acquires Collection, IssuerAccount {
         let issuer_addr = Signer::address_of(issuer_acc);
-        assert(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
+        assert!(exists<Collection<Type>>(issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
         let collection = borrow_global_mut<Collection<Type>>(issuer_addr);
         collection.locked = true;
@@ -203,7 +201,7 @@ module Sender::RMRK {
         let pubkey_id = *&collection.pubkey_id;
         Event::emit_event(
             &mut borrow_global_mut<IssuerAccount<Type>>(issuer_addr).lock_collection_events,
-            LockCollectionEvent<Type> {
+            LockCollectionEvent<Type>{
                 pubkey_id: copy pubkey_id,
                 issuer: issuer_addr,
             }
@@ -213,7 +211,7 @@ module Sender::RMRK {
     /// Creates new NFT Wallet of `Type`. Requires &signer.
     public fun create_nft_wallet<Type: store + drop>(owner_acc: &signer) {
         let owner_addr = Signer::address_of(owner_acc);
-        assert(!exists<NFTWallet<Type>>(owner_addr), ERR_NFT_WALLET_ALREADY_EXISTS);
+        assert!(!exists<NFTWallet<Type>>(owner_addr), ERR_NFT_WALLET_ALREADY_EXISTS);
 
         let wallet = NFTWallet<Type>{ nfts: Vector::empty() };
         move_to(owner_acc, wallet);
@@ -223,13 +221,13 @@ module Sender::RMRK {
     public fun mint_nft<Type: store + drop>(issuer_acc: &signer, content: Type, transferrable: u64): NFT<Type>
     acquires Collection {
         let addr = Signer::address_of(issuer_acc);
-        assert(exists<Collection<Type>>(addr), ERR_COLLECTION_DOES_NOT_EXIST);
+        assert!(exists<Collection<Type>>(addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
         let collection = borrow_global_mut<Collection<Type>>(addr);
-        assert(!collection.locked, ERR_COLLECTION_LOCKED);
+        assert!(!collection.locked, ERR_COLLECTION_LOCKED);
 
         let tokens_issued = collection.tokens_issued;
-        assert(
+        assert!(
             is_infinite_items_allowed(collection) || tokens_issued < collection.max_items,
             ERR_MAX_NUMBER_OF_COLLECTION_ITEMS_REACHED
         );
@@ -252,7 +250,7 @@ module Sender::RMRK {
 
     public fun add_nft_to_wallet<Type: store + drop>(nft: NFT<Type>, wallet_owner_addr: address)
     acquires NFTWallet {
-        assert(
+        assert!(
             exists<NFTWallet<Type>>(wallet_owner_addr),
             ERR_NFT_WALLET_DOES_NOT_EXIST
         );
@@ -266,7 +264,7 @@ module Sender::RMRK {
         set_child_nft_parent_id<Type>(copy child_nft_ident, Option::some(parent_nft_ident.id));
 
         let NFTChainIdent{ id, owner_acc_address } = parent_nft_ident;
-        assert(
+        assert!(
             exists<NFTWallet<Type>>(owner_acc_address),
             ERR_NFT_WALLET_DOES_NOT_EXIST
         );
@@ -284,7 +282,7 @@ module Sender::RMRK {
         set_child_nft_parent_id<Type>(copy child_nft_ident, Option::none());
 
         let NFTChainIdent{ id: parent_id, owner_acc_address: parent_owner_addr } = parent_nft_ident;
-        assert(
+        assert!(
             exists<NFTWallet<Type>>(parent_owner_addr),
             ERR_NFT_WALLET_DOES_NOT_EXIST
         );
@@ -293,14 +291,14 @@ module Sender::RMRK {
         let parent_nft = Vector::borrow_mut(&mut owner_wallet.nfts, i);
 
         let (child_exists, i) = Vector::index_of(&parent_nft.children_nft_ids, &child_nft_ident.id);
-        assert(child_exists, ERR_CHILD_NFT_DOES_NOT_EXIST);
+        assert!(child_exists, ERR_CHILD_NFT_DOES_NOT_EXIST);
         Vector::swap_remove(&mut parent_nft.children_nft_ids, i);
     }
 
     public fun children<Type: store + drop>(parent_nft_ident: NFTChainIdent): vector<u64>
     acquires NFTWallet {
         let NFTChainIdent{ id: nft_id, owner_acc_address: owner_addr } = parent_nft_ident;
-        assert(
+        assert!(
             exists<NFTWallet<Type>>(owner_addr),
             ERR_NFT_WALLET_DOES_NOT_EXIST
         );
@@ -319,13 +317,13 @@ module Sender::RMRK {
     public fun send_token_to_account<Type: store + drop>(owner_acc: &signer, token_id: u64, recipient_addr: address)
     acquires NFTWallet {
         let owner_addr = Signer::address_of(owner_acc);
-        assert(exists<NFTWallet<Type>>(owner_addr), ERR_NFT_WALLET_DOES_NOT_EXIST);
-        assert(exists<NFTWallet<Type>>(recipient_addr), ERR_NFT_WALLET_DOES_NOT_EXIST);
+        assert!(exists<NFTWallet<Type>>(owner_addr), ERR_NFT_WALLET_DOES_NOT_EXIST);
+        assert!(exists<NFTWallet<Type>>(recipient_addr), ERR_NFT_WALLET_DOES_NOT_EXIST);
 
         let owner_wallet = borrow_global_mut<NFTWallet<Type>>(owner_addr);
         let nft = remove_nft_by_id(owner_wallet, token_id);
 
-        assert(is_transferrable(&nft), ERR_TOKEN_IS_NOT_TRANSFERRABLE);
+        assert!(is_transferrable(&nft), ERR_TOKEN_IS_NOT_TRANSFERRABLE);
         add_nft_to_wallet(nft, recipient_addr);
     }
 
@@ -334,22 +332,22 @@ module Sender::RMRK {
     public fun burn_token<Type: store + drop>(owner_acc: &signer, token_id: u64, collection_issuer_addr: address)
     acquires NFTWallet, Collection {
         let owner_addr = Signer::address_of(owner_acc);
-        assert(exists<NFTWallet<Type>>(owner_addr), ERR_NFT_WALLET_DOES_NOT_EXIST);
+        assert!(exists<NFTWallet<Type>>(owner_addr), ERR_NFT_WALLET_DOES_NOT_EXIST);
 
         let wallet = borrow_global_mut<NFTWallet<Type>>(owner_addr);
         let nft = remove_nft_by_id(wallet, token_id);
 
-        assert(exists<Collection<Type>>(collection_issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
+        assert!(exists<Collection<Type>>(collection_issuer_addr), ERR_COLLECTION_DOES_NOT_EXIST);
         let collection =
             borrow_global_mut<Collection<Type>>(collection_issuer_addr);
-        assert(*&collection.pubkey_id == *&nft.collection_pubkey_id, ERR_COLLECTION_IS_INVALID);
+        assert!(*&collection.pubkey_id == *&nft.collection_pubkey_id, ERR_COLLECTION_IS_INVALID);
         collection.tokens_issued = collection.tokens_issued - 1;
     }
 
     fun set_child_nft_parent_id<Type: store + drop>(child_nft_ident: NFTChainIdent, parent_id: Option<u64>)
     acquires NFTWallet {
         let NFTChainIdent{ id: child_id, owner_acc_address: child_owner_addr } = child_nft_ident;
-        assert(
+        assert!(
             exists<NFTWallet<Type>>(child_owner_addr),
             ERR_NFT_WALLET_DOES_NOT_EXIST
         );
@@ -359,9 +357,9 @@ module Sender::RMRK {
         let child_nft = Vector::borrow_mut(wallet_nfts, i);
 
         if (Option::is_none(&parent_id)) {
-            assert(Option::is_some(&child_nft.parent_nft_id), ERR_PARENT_NFT_IS_NOT_SET);
+            assert!(Option::is_some(&child_nft.parent_nft_id), ERR_PARENT_NFT_IS_NOT_SET);
         } else {
-            assert(Option::is_none(&child_nft.parent_nft_id), ERR_PARENT_NFT_IS_SET)
+            assert!(Option::is_none(&child_nft.parent_nft_id), ERR_PARENT_NFT_IS_SET)
         };
         child_nft.parent_nft_id = parent_id;
     }
@@ -371,7 +369,7 @@ module Sender::RMRK {
     }
 
     fun is_transferrable<Type: store + drop>(nft: &NFT<Type>): bool {
-        nft.transferrable != 0 && nft.transferrable <= DiemBlock::get_current_block_height()
+        nft.transferrable != 0 && nft.transferrable <= PontBlock::get_current_block_height()
     }
 
     fun find_nft_index<Type: store + drop>(tokens: &vector<NFT<Type>>, id: u64): u64 {
@@ -401,7 +399,7 @@ module Sender::RMRK {
     #[test_only]
     public fun get_number_of_tokens_minted<Type: store + drop>(issuer_acc: &signer): u64 acquires Collection {
         let addr = Signer::address_of(issuer_acc);
-        assert(exists<Collection<Type>>(addr), ERR_COLLECTION_DOES_NOT_EXIST);
+        assert!(exists<Collection<Type>>(addr), ERR_COLLECTION_DOES_NOT_EXIST);
 
         let collection = borrow_global_mut<Collection<Type>>(addr);
         collection.tokens_issued
@@ -433,6 +431,7 @@ module Sender::RMRK {
         issuer: address,
         max_items: u64,
     }
+
     struct RequestChangeIssuerEvent<phantom Type> has store, drop {
         pubkey_id: String,
         old_issuer: address,
